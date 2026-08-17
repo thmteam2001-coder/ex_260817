@@ -3,8 +3,8 @@
 
 create table if not exists public.app_events (
   id uuid primary key default gen_random_uuid(),
-  event_type text not null,       -- 'consume' | 'discard' | 'remove_mistake' | 'recipe_tab_click' | 'recipe_open'
-  item_name text,                 -- consume/discard/remove_mistake 이벤트일 때 재료 이름
+  event_type text not null,       -- 'consume' | 'discard' | 'recipe_tab_click' | 'recipe_open'
+  item_name text,                 -- consume/discard 이벤트일 때 재료 이름
   recipe_id text,                 -- recipe_open 이벤트일 때 레시피 id
   recipe_name text,               -- recipe_open 이벤트일 때 레시피 이름
   created_at timestamptz not null default now()
@@ -22,7 +22,7 @@ create policy "Allow anonymous inserts"
 
 -- 집계 예시 쿼리 (Supabase 대시보드 SQL Editor에서 실행):
 --
--- 먹음/폐기 버튼 클릭 횟수 ('remove_mistake'는 잘못 등록된 항목 삭제라 집계에서 제외됨):
+-- 먹음/폐기 버튼 클릭 횟수:
 --   select event_type, count(*) from public.app_events
 --   where event_type in ('consume', 'discard') group by event_type;
 --

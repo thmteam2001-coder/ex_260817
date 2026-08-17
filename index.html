@@ -568,7 +568,7 @@ function FreshnessRing({ percent, status, emoji, size = 56 }) {
 /* ------------------------------------------------------------------ */
 /* 재료 카드 / 레시피 카드                                                */
 /* ------------------------------------------------------------------ */
-function ItemCard({ item, onConsume, onDelete, onRemoveMistake, onEditDate }) {
+function ItemCard({ item, onConsume, onDelete, onEditDate }) {
   const daysLeft = daysBetween(item.expiryDate);
   const status = getStatus(daysLeft);
   const percent = item.totalDays > 0 ? daysLeft / item.totalDays : 0;
@@ -607,10 +607,6 @@ function ItemCard({ item, onConsume, onDelete, onRemoveMistake, onEditDate }) {
           <button className="icon-btn delete-btn" title="다 먹지 못하고 음식물로 폐기" onClick={() => onDelete(item.id)}>
             <Trash2 size={16} />
             <span className="icon-btn-label">폐기</span>
-          </button>
-          <button className="icon-btn remove-btn" title="잘못 등록해서 삭제 (먹음/폐기로 집계 안 됨)" onClick={() => onRemoveMistake(item.id)}>
-            <XIcon size={16} />
-            <span className="icon-btn-label">삭제</span>
           </button>
         </div>
       </div>
@@ -735,11 +731,6 @@ function App() {
     if (item) logEvent("discard", { item_name: item.name });
     setItems((prev) => prev.filter((it) => it.id !== id));
   }
-  function removeMistakeItem(id) {
-    const item = items.find((it) => it.id === id);
-    if (item) logEvent("remove_mistake", { item_name: item.name });
-    setItems((prev) => prev.filter((it) => it.id !== id));
-  }
   function editItemDate(id, newDate) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, expiryDate: newDate } : it)));
   }
@@ -834,7 +825,6 @@ function App() {
         .icon-btn-label{ font-size:9px; font-weight:600; line-height:1; }
         .consume-btn:hover{ color:var(--fresh); background:rgba(111,207,122,0.14); }
         .delete-btn:hover{ color:var(--urgent); background:rgba(232,106,77,0.14); }
-        .remove-btn:hover{ color:var(--text); background:rgba(255,255,255,0.1); }
         .empty-state{ margin:6px 20px 6px; padding:32px 20px; text-align:center; border:1.5px dashed var(--line); border-radius:20px; }
         .empty-state .emoji{ font-size:34px; }
         .empty-state h3{ font-family:'Space Grotesk', sans-serif; font-size:16px; margin:10px 0 4px; }
@@ -962,7 +952,7 @@ function App() {
               ) : (
                 <div className="list">
                   {sortedItems.map((item) => (
-                    <ItemCard key={item.id} item={item} onConsume={consumeItem} onDelete={deleteItem} onRemoveMistake={removeMistakeItem} onEditDate={editItemDate} />
+                    <ItemCard key={item.id} item={item} onConsume={consumeItem} onDelete={deleteItem} onEditDate={editItemDate} />
                   ))}
                 </div>
               )
