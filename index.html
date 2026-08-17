@@ -623,9 +623,9 @@ function ItemCard({ item, onConsume, onDelete, onEditDate, onOpenRecipe }) {
       <div className="item-actions">
         <span className={`item-badge badge-${status}`}>{statusLabel(status, daysLeft)}</span>
         <div className="item-buttons-row">
-          <button className="icon-btn consume-btn" title="다 먹었어요" onClick={() => onConsume(item.id)}>
+          <button className="icon-btn consume-btn" title="다 사용했어요" onClick={() => onConsume(item.id)}>
             <CheckCircle2 size={18} />
-            <span className="icon-btn-label">먹음</span>
+            <span className="icon-btn-label">사용</span>
           </button>
           <button className="icon-btn delete-btn" title="다 먹지 못하고 음식물로 폐기" onClick={() => onDelete(item.id)}>
             <Trash2 size={16} />
