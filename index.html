@@ -231,6 +231,7 @@ let supabaseClient = null;
 })();
 
 function logEvent(eventType, meta = {}) {
+  if (window.gtag) window.gtag("event", eventType, meta);
   if (!supabaseClient) return;
   supabaseClient.from("app_events").insert({ event_type: eventType, ...meta }).then(
     () => {},
