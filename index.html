@@ -568,7 +568,7 @@ function FreshnessRing({ percent, status, emoji, size = 56 }) {
 /* ------------------------------------------------------------------ */
 /* 재료 카드 / 레시피 카드                                                */
 /* ------------------------------------------------------------------ */
-function ItemCard({ item, onConsume, onDelete, onEditDate }) {
+function ItemCard({ item, onConsume, onDelete, onRemoveMistake, onEditDate }) {
   const daysLeft = daysBetween(item.expiryDate);
   const status = getStatus(daysLeft);
   const percent = item.totalDays > 0 ? daysLeft / item.totalDays : 0;
@@ -580,7 +580,6 @@ function ItemCard({ item, onConsume, onDelete, onEditDate }) {
       <div className="item-body">
         <div className="item-top">
           <span className="item-name">{item.name}</span>
-          <span className={`item-badge badge-${status}`}>{statusLabel(status, daysLeft)}</span>
         </div>
         <div className="item-meta">
           {editing ? (
@@ -599,14 +598,21 @@ function ItemCard({ item, onConsume, onDelete, onEditDate }) {
         </div>
       </div>
       <div className="item-actions">
-        <button className="icon-btn consume-btn" title="다 먹었어요" onClick={() => onConsume(item.id)}>
-          <CheckCircle2 size={18} />
-          <span className="icon-btn-label">먹음</span>
-        </button>
-        <button className="icon-btn delete-btn" title="다 먹지 못하고 음식물로 폐기" onClick={() => onDelete(item.id)}>
-          <Trash2 size={16} />
-          <span className="icon-btn-label">폐기</span>
-        </button>
+        <span className={`item-badge badge-${status}`}>{statusLabel(status, daysLeft)}</span>
+        <div className="item-buttons-row">
+          <button className="icon-btn consume-btn" title="다 먹었어요" onClick={() => onConsume(item.id)}>
+            <CheckCircle2 size={18} />
+            <span className="icon-btn-label">먹음</span>
+          </button>
+          <button className="icon-btn delete-btn" title="다 먹지 못하고 음식물로 폐기" onClick={() => onDelete(item.id)}>
+            <Trash2 size={16} />
+            <span className="icon-btn-label">폐기</span>
+          </button>
+          <button className="icon-btn remove-btn" title="잘못 등록해서 삭제 (먹음/폐기로 집계 안 됨)" onClick={() => onRemoveMistake(item.id)}>
+            <XIcon size={16} />
+            <span className="icon-btn-label">삭제</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -729,6 +735,11 @@ function App() {
     if (item) logEvent("discard", { item_name: item.name });
     setItems((prev) => prev.filter((it) => it.id !== id));
   }
+  function removeMistakeItem(id) {
+    const item = items.find((it) => it.id === id);
+    if (item) logEvent("remove_mistake", { item_name: item.name });
+    setItems((prev) => prev.filter((it) => it.id !== id));
+  }
   function editItemDate(id, newDate) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, expiryDate: newDate } : it)));
   }
@@ -804,9 +815,9 @@ function App() {
         .ring-emoji{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
         .ring-arc{ transition: stroke-dashoffset .6s ease; }
         .item-body{ flex:1; min-width:0; }
-        .item-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+        .item-top{ display:flex; align-items:center; gap:8px; }
         .item-name{ font-weight:600; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .item-badge{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap; flex-shrink:0; }
+        .item-badge{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; font-weight:600; padding:4px 8px; border-radius:999px; white-space:nowrap; text-align:center; }
         .badge-fresh{ background:rgba(111,207,122,0.15); color:var(--fresh); }
         .badge-warning{ background:rgba(240,173,62,0.16); color:var(--warn); }
         .badge-urgent{ background:rgba(232,106,77,0.18); color:var(--urgent); }
@@ -816,12 +827,14 @@ function App() {
         .meta-edit-btn:hover{ color:var(--text); }
         .unmatched-tag{ font-size:10.5px; color:var(--warn); background:rgba(240,173,62,0.12); padding:1px 7px; border-radius:999px; }
         .date-input-inline{ background:var(--surface-2); border:1px solid var(--line); color:var(--text); font-size:11.5px; border-radius:7px; padding:2px 6px; }
-        .item-actions{ display:flex; flex-direction:column; gap:6px; }
+        .item-actions{ display:flex; flex-direction:column; align-items:stretch; gap:6px; }
+        .item-buttons-row{ display:flex; gap:6px; }
         .icon-btn{ border:none; background:var(--surface-2); color:var(--text-muted); width:36px; height:40px; border-radius:9px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; transition: transform .15s ease, color .15s ease, background .15s ease; font-family:inherit; }
         .icon-btn:hover{ transform:translateY(-1px); }
         .icon-btn-label{ font-size:9px; font-weight:600; line-height:1; }
         .consume-btn:hover{ color:var(--fresh); background:rgba(111,207,122,0.14); }
         .delete-btn:hover{ color:var(--urgent); background:rgba(232,106,77,0.14); }
+        .remove-btn:hover{ color:var(--text); background:rgba(255,255,255,0.1); }
         .empty-state{ margin:6px 20px 6px; padding:32px 20px; text-align:center; border:1.5px dashed var(--line); border-radius:20px; }
         .empty-state .emoji{ font-size:34px; }
         .empty-state h3{ font-family:'Space Grotesk', sans-serif; font-size:16px; margin:10px 0 4px; }
@@ -949,7 +962,7 @@ function App() {
               ) : (
                 <div className="list">
                   {sortedItems.map((item) => (
-                    <ItemCard key={item.id} item={item} onConsume={consumeItem} onDelete={deleteItem} onEditDate={editItemDate} />
+                    <ItemCard key={item.id} item={item} onConsume={consumeItem} onDelete={deleteItem} onRemoveMistake={removeMistakeItem} onEditDate={editItemDate} />
                   ))}
                 </div>
               )
