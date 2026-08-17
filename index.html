@@ -8,6 +8,7 @@
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
@@ -197,6 +198,35 @@ function statusLabel(status, daysLeft) {
 }
 function uid() {
   return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "id-" + Math.random().toString(36).slice(2) + Date.now();
+}
+
+/* ------------------------------------------------------------------ */
+/* Supabase 분석 이벤트 로깅.
+   URL/anon key는 소스에 넣지 않고, Vercel 서버리스 함수(/api/config)가
+   런타임에 Vercel 환경 변수에서 읽어 내려준다. 로컬에서 index.html을
+   파일로 직접 열거나 /api/config가 없으면 조용히 로깅을 건너뛴다 —
+   분석 로깅 실패가 앱 사용을 막아서는 안 되기 때문이다. */
+/* ------------------------------------------------------------------ */
+let supabaseClient = null;
+(async function initSupabase() {
+  try {
+    const res = await fetch("/api/config");
+    if (!res.ok) return;
+    const { url, anonKey } = await res.json();
+    if (url && anonKey && window.supabase) {
+      supabaseClient = window.supabase.createClient(url, anonKey);
+    }
+  } catch {
+    /* 설정을 못 받아오면 분석 로깅 없이 앱은 정상 동작한다 */
+  }
+})();
+
+function logEvent(eventType, meta = {}) {
+  if (!supabaseClient) return;
+  supabaseClient.from("app_events").insert({ event_type: eventType, ...meta }).then(
+    () => {},
+    () => {}
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -679,8 +709,16 @@ function App() {
     setPendingItems([]);
     setView("home");
   }
-  function consumeItem(id) { setItems((prev) => prev.filter((it) => it.id !== id)); }
-  function deleteItem(id) { setItems((prev) => prev.filter((it) => it.id !== id)); }
+  function consumeItem(id) {
+    const item = items.find((it) => it.id === id);
+    if (item) logEvent("consume", { item_name: item.name });
+    setItems((prev) => prev.filter((it) => it.id !== id));
+  }
+  function deleteItem(id) {
+    const item = items.find((it) => it.id === id);
+    if (item) logEvent("discard", { item_name: item.name });
+    setItems((prev) => prev.filter((it) => it.id !== id));
+  }
   function editItemDate(id, newDate) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, expiryDate: newDate } : it)));
   }
@@ -888,7 +926,7 @@ function App() {
 
             <div className="tab-row">
               <button className={`tab-btn ${homeTab === "fridge" ? "active" : ""}`} onClick={() => setHomeTab("fridge")}>🧊 냉장고</button>
-              <button className={`tab-btn ${homeTab === "recipes" ? "active" : ""}`} onClick={() => setHomeTab("recipes")}>🍳 레시피</button>
+              <button className={`tab-btn ${homeTab === "recipes" ? "active" : ""}`} onClick={() => { logEvent("recipe_tab_click"); setHomeTab("recipes"); }}>🍳 레시피</button>
             </div>
 
             {homeTab === "fridge" && (
@@ -912,7 +950,10 @@ function App() {
                 <p className="section-sub" style={{ padding: "0 4px" }}>냉장고 재료와 자동으로 매칭해서 만들 수 있는 순서로 정렬했어요.</p>
                 {rankedRecipes.map(({ recipe, score }) => (
                   <RecipeListCard key={recipe.id} recipe={recipe} score={score}
-                    onOpen={() => { setSelectedRecipeId(recipe.id); setRecipeServings(recipe.servings); setView("recipe-detail"); }} />
+                    onOpen={() => {
+                      logEvent("recipe_open", { recipe_id: recipe.id, recipe_name: recipe.name });
+                      setSelectedRecipeId(recipe.id); setRecipeServings(recipe.servings); setView("recipe-detail");
+                    }} />
                 ))}
               </div>
             )}
