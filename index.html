@@ -609,7 +609,7 @@ function ItemCard({ item, onConsume, onDelete, onEditDate, onOpenRecipe }) {
             {recipesOpen && (
               <div className="item-recipes-list">
                 {matchingRecipes.map((r) => (
-                  <button key={r.id} className="item-recipe-link" onClick={() => onOpenRecipe(r)}>
+                  <button key={r.id} className="item-recipe-link" onClick={() => onOpenRecipe(item, r)}>
                     <span>{r.emoji}</span> {r.name} 레시피
                   </button>
                 ))}
@@ -720,7 +720,7 @@ function App() {
       const built = keys.map((key) => ({
         id: uid(), name: key, emoji: EMOJI_MAP[key] || "🥫",
         addedDate: today, expiryDate: addDays(today, SHELF_LIFE_DB[key]),
-        totalDays: SHELF_LIFE_DB[key], matched: true, dbKey: key,
+        totalDays: SHELF_LIFE_DB[key], matched: true, dbKey: key, recipeViewed: false,
       }));
       setPendingItems(built);
       setView("confirm");
@@ -744,16 +744,17 @@ function App() {
   }
   function consumeItem(id) {
     const item = items.find((it) => it.id === id);
-    if (item) logEvent("consume", { item_name: item.name });
+    if (item) logEvent("consume", { item_name: item.name, recipe_viewed: !!item.recipeViewed });
     setItems((prev) => prev.filter((it) => it.id !== id));
   }
   function deleteItem(id) {
     const item = items.find((it) => it.id === id);
-    if (item) logEvent("discard", { item_name: item.name });
+    if (item) logEvent("discard", { item_name: item.name, recipe_viewed: !!item.recipeViewed });
     setItems((prev) => prev.filter((it) => it.id !== id));
   }
-  function openRecipeFromItem(recipe) {
+  function openRecipeFromItem(item, recipe) {
     logEvent("recipe_open", { recipe_id: recipe.id, recipe_name: recipe.name });
+    setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, recipeViewed: true } : it)));
     setSelectedRecipeId(recipe.id);
     setRecipeServings(recipe.servings);
     setView("recipe-detail");
@@ -772,7 +773,7 @@ function App() {
     const newItem = {
       id: uid(), name, emoji: matchEmoji(name), addedDate: today,
       expiryDate: addDays(today, days), totalDays: days, matched: guess.matched,
-      dbKey: guess.matched ? guess.key : null,
+      dbKey: guess.matched ? guess.key : null, recipeViewed: false,
     };
     setItems((prev) => [...prev, newItem]);
     setManualName("");
