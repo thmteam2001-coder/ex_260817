@@ -1,0 +1,1119 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>신선해 — 냉장고 유통기한 관리 (2단계)</title>
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin:0; padding:0; }
+  #root { min-height:100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+/* ------------------------------------------------------------------ */
+/* 아이콘: lucide-react 대신 의존성 없는 심플 SVG로 직접 구현             */
+/* ------------------------------------------------------------------ */
+function Icon({ size = 16, children, className }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      {children}
+    </svg>
+  );
+}
+const Camera = (p) => <Icon {...p}><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.4"/></Icon>;
+const ImagePlus = (p) => <Icon {...p}><rect x="3" y="4" width="14" height="15" rx="2"/><circle cx="8" cy="9.5" r="1.4"/><path d="M3 16l4-4 3 3 2.5-2.5L17 16"/><path d="M19.5 8v6M16.5 11h6"/></Icon>;
+const Plus = (p) => <Icon {...p}><path d="M12 5v14M5 12h14"/></Icon>;
+const Trash2 = (p) => <Icon {...p}><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M10 11v6M14 11v6"/></Icon>;
+const CheckCircle2 = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.6 2.6L16 9.3"/></Icon>;
+const XIcon = (p) => <Icon {...p}><path d="M6 6l12 12M18 6L6 18"/></Icon>;
+const ArrowLeft = (p) => <Icon {...p}><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></Icon>;
+const Sparkles = (p) => <Icon {...p}><path d="M12 3l1.6 4.6L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.4z"/><path d="M19 15l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6z"/></Icon>;
+const AlertTriangle = (p) => <Icon {...p}><path d="M12 4l9 16H3z"/><path d="M12 10v4"/><circle cx="12" cy="17.2" r="0.6" fill="currentColor" stroke="none"/></Icon>;
+const Loader2 = (p) => <Icon {...p}><path d="M21 12a9 9 0 1 1-9-9"/></Icon>;
+const RotateCcw = (p) => <Icon {...p}><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></Icon>;
+const Pencil = (p) => <Icon {...p}><path d="M4 20l4-1 10-10-3-3L5 16l-1 4z"/><path d="M14 6l3 3"/></Icon>;
+
+/* ------------------------------------------------------------------ */
+/* 평균 소비기한 DB (일 단위)                                            */
+/* ------------------------------------------------------------------ */
+const SHELF_LIFE_DB = {
+  우유: 7, 두유: 10, 요거트: 14, 치즈: 30, 계란: 21, 버터: 60,
+  두부: 5, 순두부: 5, 콩나물: 3, 숙주: 3,
+  상추: 5, 깻잎: 7, 시금치: 5, 대파: 10, 쪽파: 7, 양파: 30, 마늘: 30, 생강: 14,
+  감자: 30, 고구마: 21, 당근: 21, 오이: 5, 토마토: 7, 애호박: 5, 가지: 7,
+  브로콜리: 7, 버섯: 5, 파프리카: 10, 무: 30, 배추: 14, 양배추: 21,
+  사과: 14, 배: 14, 바나나: 5, 딸기: 3, 포도: 7, 귤: 14, 오렌지: 14, 복숭아: 5,
+  삼겹살: 3, 소고기: 3, 돼지고기: 3, 닭고기: 2, 다짐육: 2,
+  생선: 2, 고등어: 2, 삼치: 2, 새우: 2, 오징어: 2, 명태: 2, 조기: 2,
+  어묵: 7, 만두: 14, 소시지: 10, 햄: 14,
+  김치: 90, 단무지: 60, 장아찌: 60,
+  식빵: 5, 라면: 180, 참치캔: 365, 통조림: 365,
+  부추: 5, 미나리: 5, 고추: 10, 청경채: 5,
+  레몬: 21, 아보카도: 5, 베이컨: 10, 떡: 14, 쌀: 180,
+  수박: 7, 참외: 5, 키위: 14, 파인애플: 7, 망고: 5,
+};
+
+const EMOJI_MAP = {
+  우유: "🥛", 두유: "🥛", 요거트: "🍮", 치즈: "🧀", 계란: "🥚", 버터: "🧈",
+  두부: "⬜", 순두부: "⬜", 콩나물: "🌱", 숙주: "🌱",
+  상추: "🥬", 깻잎: "🌿", 시금치: "🥬", 대파: "🧅", 쪽파: "🧅", 양파: "🧅", 마늘: "🧄", 생강: "🫚",
+  감자: "🥔", 고구마: "🍠", 당근: "🥕", 오이: "🥒", 토마토: "🍅", 애호박: "🥒", 가지: "🍆",
+  브로콜리: "🥦", 버섯: "🍄", 파프리카: "🫑", 무: "🌱", 배추: "🥬", 양배추: "🥬",
+  사과: "🍎", 배: "🍐", 바나나: "🍌", 딸기: "🍓", 포도: "🍇", 귤: "🍊", 오렌지: "🍊", 복숭아: "🍑",
+  삼겹살: "🥓", 소고기: "🥩", 돼지고기: "🥩", 닭고기: "🍗", 다짐육: "🥩",
+  생선: "🐟", 고등어: "🐟", 삼치: "🐟", 새우: "🦐", 오징어: "🦑", 명태: "🐟", 조기: "🐟",
+  어묵: "🍢", 만두: "🥟", 소시지: "🌭", 햄: "🍖",
+  김치: "🌶️", 단무지: "🥒", 장아찌: "🥒",
+  식빵: "🍞", 라면: "🍜", 참치캔: "🥫", 통조림: "🥫",
+  부추: "🌿", 미나리: "🌿", 고추: "🌶️", 청경채: "🥬",
+  레몬: "🍋", 아보카도: "🥑", 베이컨: "🥓", 떡: "🍡", 쌀: "🍚",
+  수박: "🍉", 참외: "🍈", 키위: "🥝", 파인애플: "🍍", 망고: "🥭",
+};
+
+/* 같은 재료의 다른 표기 → 표준 키워드로 매핑.
+   OCR/입력에서 어떤 표기가 잡히든 냉장고·레시피에서는 하나의 항목으로 취급된다. */
+const ALIASES = {
+  달걀: "계란", 깐마늘: "마늘", 다진마늘: "마늘", 양상추: "상추",
+  소세지: "소시지", 청양고추: "고추", 풋고추: "고추", 홍고추: "고추", 알배추: "배추",
+  닭가슴살: "닭고기", 닭다리: "닭고기", 닭날개: "닭고기", 닭봉: "닭고기", 닭안심: "닭고기", 통닭: "닭고기",
+};
+function canon(key) { return ALIASES[key] || key; }
+
+const ALL_KEYS = [...Object.keys(SHELF_LIFE_DB), ...Object.keys(ALIASES)];
+const SORTED_KEYS = ALL_KEYS.sort((a, b) => b.length - a.length);
+
+/* OCR 스캔은 세 단계로 나눠 처리한다:
+   1) EXACT_SCAN_KEYS(2글자 이상): 줄 안 어디에 있든 부분일치로 찾는다. "무항생제계란30구"처럼
+      브랜드/용량이 붙어도 "계란"만 있으면 잡힌다. 기존 방식 그대로.
+   2) SUFFIX_SCAN_KEYS(1글자: 무/배/귤): 부분일치를 쓰면 "무료배송"의 "무"처럼 오탐이 나서,
+      대신 "1개/1구" 같은 수량 단위를 뗀 뒤 줄이 그 글자로 "끝나는" 경우만 인정한다.
+      "국내산 절단무, 1개" -> "국내산절단무개" -> 수량단위 제거 -> "국내산절단무" -> "무"로 끝남 -> 인정.
+      "무료배송" -> 수량단위 없음 -> "무료배송" -> "무"로 끝나지 않음 -> 제외.
+   3) FUZZY_SCAN_KEYS(3글자 이상): 실제 영수증으로 테스트해보니 "브로콜리"가 "브로커리"처럼
+      한 글자만 틀리게 인식되는 경우가 흔했다. 그래서 줄 전체(수량단위 제거 후)가 키워드와
+      편집거리 1 이내로 "거의 같으면" 인정한다. 오탐을 막기 위해 부분일치가 아니라 줄
+      전체를 기준으로만 비교한다 — 실제 4개 OCR 결과로 검증했을 때 오탐 0건, 회수 성공. */
+const EXACT_SCAN_KEYS = SORTED_KEYS.filter((k) => k.length >= 2);
+const SUFFIX_SCAN_KEYS = SORTED_KEYS.filter((k) => k.length === 1);
+const FUZZY_SCAN_KEYS = SORTED_KEYS.filter((k) => k.length >= 3);
+
+const TRAILING_UNITS = ["개", "구", "입", "팩", "봉", "단", "통", "망", "모", "줄", "포", "캔", "병", "갑", "원", "장", "매", "대", "알", "쪽", "톨", "조각"];
+function stripTrailingUnits(s) {
+  let result = s;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const u of TRAILING_UNITS) {
+      if (result.length > u.length && result.endsWith(u)) {
+        result = result.slice(0, -u.length);
+        changed = true;
+      }
+    }
+  }
+  return result;
+}
+
+function levenshteinAtMost1(a, b) {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  const la = a.length, lb = b.length;
+  const dp = Array.from({ length: la + 1 }, () => new Array(lb + 1).fill(0));
+  for (let i = 0; i <= la; i++) dp[i][0] = i;
+  for (let j = 0; j <= lb; j++) dp[0][j] = j;
+  for (let i = 1; i <= la; i++) {
+    for (let j = 1; j <= lb; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[la][lb] <= 1;
+}
+
+function matchShelfLife(rawName) {
+  const name = (rawName || "").replace(/\s/g, "");
+  for (const key of SORTED_KEYS) {
+    if (name.includes(key)) {
+      const ck = canon(key);
+      return { days: SHELF_LIFE_DB[ck], matched: true, key: ck };
+    }
+  }
+  return { days: 7, matched: false, key: null };
+}
+function matchEmoji(rawName) {
+  const name = (rawName || "").replace(/\s/g, "");
+  for (const key of SORTED_KEYS) {
+    const ck = canon(key);
+    if (name.includes(key) && EMOJI_MAP[ck]) return EMOJI_MAP[ck];
+  }
+  return "🥫";
+}
+
+/* ------------------------------------------------------------------ */
+/* 날짜 유틸                                                            */
+/* ------------------------------------------------------------------ */
+function toISODate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function todayStr() { return toISODate(new Date()); }
+function addDays(dateStr, days) {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return toISODate(d);
+}
+function daysBetween(dateStr) {
+  const target = new Date(dateStr + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((target - today) / 86400000);
+}
+function formatShort(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+function getStatus(daysLeft) {
+  if (daysLeft <= 0) return "expired";
+  if (daysLeft <= 1) return "urgent";
+  if (daysLeft <= 4) return "warning";
+  return "fresh";
+}
+function statusLabel(status, daysLeft) {
+  if (status === "expired") return daysLeft === 0 ? "오늘까지" : `기한 ${Math.abs(daysLeft)}일 지남`;
+  return `D-${daysLeft}`;
+}
+function uid() {
+  return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "id-" + Math.random().toString(36).slice(2) + Date.now();
+}
+
+/* ------------------------------------------------------------------ */
+/* 이미지 로드 & OCR 전처리 (인식률을 높이기 위한 그레이스케일+대비 보정)   */
+/* ------------------------------------------------------------------ */
+function loadImageEl(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("이미지를 불러오지 못했어요."));
+    img.src = src;
+  });
+}
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("파일을 읽지 못했어요."));
+    reader.readAsDataURL(file);
+  });
+}
+function toGrayscaleCanvas(img) {
+  const targetLong = 1700;
+  const longSide = Math.max(img.width, img.height);
+  const scale = Math.min(2.4, Math.max(1, targetLong / longSide));
+  const w = Math.round(img.width * scale);
+  const h = Math.round(img.height * scale);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, w, h);
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const d = imageData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    d[i] = d[i + 1] = d[i + 2] = g;
+  }
+  ctx.putImageData(imageData, 0, 0);
+  return { canvas, w, h };
+}
+
+/* 이미지를 아주 작게 축소했다가 다시 원본 크기로 확대하면, 브라우저의 보간이
+   저절로 블러 역할을 해서 "그 위치 주변의 평균 밝기(조명)" 지도를 값싸게 만들 수 있다.
+   이 지역 평균값을 기준으로 대비를 잡으면, 그림자나 조명 얼룩이 있는 영수증 사진에서도
+   전역 대비 보정보다 훨씬 안정적으로 글자와 배경을 분리할 수 있다. */
+function localMeanData(grayCanvas, w, h) {
+  const smallW = Math.max(6, Math.round(w / 24));
+  const smallH = Math.max(6, Math.round(h / 24));
+  const smallCanvas = document.createElement("canvas");
+  smallCanvas.width = smallW;
+  smallCanvas.height = smallH;
+  smallCanvas.getContext("2d").drawImage(grayCanvas, 0, 0, smallW, smallH);
+  const bigCanvas = document.createElement("canvas");
+  bigCanvas.width = w;
+  bigCanvas.height = h;
+  const bctx = bigCanvas.getContext("2d");
+  bctx.imageSmoothingEnabled = true;
+  bctx.drawImage(smallCanvas, 0, 0, w, h);
+  return bctx.getImageData(0, 0, w, h).data;
+}
+
+/* OCR에 넣을 두 가지 버전을 만든다: 하나는 지역 대비를 살린 회색조,
+   다른 하나는 글자 윤곽을 또렷하게 만든 흑백 이진화. 사진 상태에 따라
+   둘 중 어느 쪽이 더 잘 맞을지 다르기 때문에 두 버전을 모두 인식에 사용한다. */
+function buildOcrVariants(img) {
+  const { canvas: grayCanvas, w, h } = toGrayscaleCanvas(img);
+  const grayData = grayCanvas.getContext("2d").getImageData(0, 0, w, h).data;
+  const localMean = localMeanData(grayCanvas, w, h);
+
+  const contrastCanvas = document.createElement("canvas");
+  contrastCanvas.width = w;
+  contrastCanvas.height = h;
+  const cctx = contrastCanvas.getContext("2d");
+  const cData = cctx.createImageData(w, h);
+  for (let i = 0; i < grayData.length; i += 4) {
+    let v = 128 + (grayData[i] - localMean[i]) * 2.4;
+    v = Math.max(0, Math.min(255, v));
+    cData.data[i] = cData.data[i + 1] = cData.data[i + 2] = v;
+    cData.data[i + 3] = 255;
+  }
+  cctx.putImageData(cData, 0, 0);
+
+  const binCanvas = document.createElement("canvas");
+  binCanvas.width = w;
+  binCanvas.height = h;
+  const bctx2 = binCanvas.getContext("2d");
+  const bData = bctx2.createImageData(w, h);
+  for (let i = 0; i < grayData.length; i += 4) {
+    const v = grayData[i] < localMean[i] - 14 ? 0 : 255;
+    bData.data[i] = bData.data[i + 1] = bData.data[i + 2] = v;
+    bData.data[i + 3] = 255;
+  }
+  bctx2.putImageData(bData, 0, 0);
+
+  return { contrastCanvas, binCanvas };
+}
+
+/* ------------------------------------------------------------------ */
+/* 브라우저 내장 OCR (Tesseract.js) — 외부 서버 호출 없음, API 키 불필요.
+   서로 다른 전처리 + 페이지 분할 모드(PSM)로 두 번 인식해서 결과를 합친다.
+   - 1차: 지역 대비 보정 + PSM 4(단일 칼럼) → 정갈한 영수증에 강함
+   - 2차: 지역 이진화 + PSM 11(흩어진 텍스트) → 캡처 화면·아이콘 섞인 레이아웃에 강함 */
+async function runOcrMultiPass(img, onProgress) {
+  const { contrastCanvas, binCanvas } = buildOcrVariants(img);
+  let passIndex = 0;
+  const worker = await Tesseract.createWorker("kor", 1, {
+    logger: (m) => {
+      if (onProgress && m.status === "recognizing text" && typeof m.progress === "number") {
+        onProgress(Math.min(99, Math.round(((passIndex + m.progress) / 2) * 100)));
+      }
+    },
+  });
+  try {
+    await worker.setParameters({ tessedit_pageseg_mode: "4" });
+    const pass1 = await worker.recognize(contrastCanvas);
+    passIndex = 1;
+    await worker.setParameters({ tessedit_pageseg_mode: "11" });
+    const pass2 = await worker.recognize(binCanvas);
+    return (pass1.data.text || "") + "\n" + (pass2.data.text || "");
+  } finally {
+    await worker.terminate();
+  }
+}
+
+/* 줄 단위로 한글 음절만 남기고(숫자·기호·영문 제거) 등록된 식재료 키워드가
+   포함돼 있는지 스캔한다. 줄 단위로 처리해서 서로 다른 줄의 글자가 이어붙어
+   엉뚱하게 매칭되는 것을 방지한다. 다른 표기(달걀/깐마늘 등)는 표준 항목으로 합친다. */
+/* 바코드·카드번호·장식선 같은 잡음 줄은 OCR이 특정 글자를 반복해서 뱉어내는 경우가 많다
+   (예: "수수구구우수구수수..."). 이런 줄은 우연히 등록된 키워드와 매칭될 위험이 있어서,
+   충분히 길면서(8자 이상) 글자 다양성이 낮은(고유 글자 비율 60% 미만) 줄은 매칭 대상에서
+   제외한다. 실제 영수증 이미지로 검증했을 때 정상 상품명 줄은 전혀 걸러지지 않았다. */
+function isLikelyNoiseLine(cleaned) {
+  if (cleaned.length < 8) return false;
+  const uniqueCount = new Set(cleaned).size;
+  return uniqueCount / cleaned.length < 0.6;
+}
+
+function extractFoodKeywordsFromText(rawText) {
+  const lines = rawText.split(/\r?\n/);
+  const seen = new Set();
+  const found = [];
+  const add = (key) => {
+    const ck = canon(key);
+    if (!seen.has(ck)) {
+      seen.add(ck);
+      found.push(ck);
+    }
+  };
+  for (const line of lines) {
+    const cleaned = line.replace(/[^\uAC00-\uD7A3]/g, "");
+    if (!cleaned || isLikelyNoiseLine(cleaned)) continue;
+
+    // 1) 부분일치 (2글자 이상 키워드, 줄 안 어디든)
+    for (const key of EXACT_SCAN_KEYS) {
+      if (cleaned.includes(key)) add(key);
+    }
+
+    /* 2)·3)번은 오탐 위험이 있는 규칙이라, 실제 상품 줄에는 거의 항상 숫자(품목번호·수량·가격)가
+       같이 붙어 있다는 점을 안전장치로 쓴다. URL이나 바코드 찌꺼기 같은 숫자 없는 잡음 줄에서
+       우연히 "배"로 끝나거나 편집거리 1짜리 우연한 매칭이 나오는 걸 실제 영수증 테스트로
+       확인해서 막았다. */
+    if (!/[0-9]/.test(line)) continue;
+    const stripped = stripTrailingUnits(cleaned);
+    if (stripped) {
+      // 2) 끝단어 일치 (1글자 키워드: 무/배/귤 — 수량단위 제거 후 끝 글자로만 판단)
+      for (const key of SUFFIX_SCAN_KEYS) {
+        if (stripped.endsWith(key)) add(key);
+      }
+      // 3) 퍼지 매칭 (3글자 이상 키워드 — 줄 전체가 편집거리 1 이내로 거의 같을 때만)
+      for (const key of FUZZY_SCAN_KEYS) {
+        if (levenshteinAtMost1(stripped, key)) add(key);
+      }
+    }
+  }
+  return found;
+}
+
+/* ------------------------------------------------------------------ */
+/* 레시피 & 영양성분 DB                                                  */
+/* ------------------------------------------------------------------ */
+const NUTRITION_DB = { // 100g당 대략적인 평균값 (kcal, 탄수화물g, 단백질g, 지방g)
+  계란: { kcal: 143, carb: 1.1, protein: 12.6, fat: 9.9 },
+  두부: { kcal: 84, carb: 2.5, protein: 8.1, fat: 4.8 },
+  대파: { kcal: 32, carb: 7.3, protein: 1.5, fat: 0.3 },
+  당근: { kcal: 34, carb: 8, protein: 0.9, fat: 0.2 },
+  감자: { kcal: 77, carb: 17.5, protein: 2, fat: 0.1 },
+  콩나물: { kcal: 27, carb: 3.6, protein: 3.6, fat: 0.6 },
+  오이: { kcal: 15, carb: 3.6, protein: 0.7, fat: 0.1 },
+  마늘: { kcal: 143, carb: 33, protein: 6.4, fat: 0.5 },
+  김치: { kcal: 32, carb: 4.8, protein: 1.9, fat: 0.5 },
+  시금치: { kcal: 23, carb: 3.6, protein: 2.9, fat: 0.4 },
+  소고기: { kcal: 250, carb: 0, protein: 26, fat: 15 },
+  무: { kcal: 18, carb: 4.1, protein: 0.6, fat: 0.1 },
+  애호박: { kcal: 17, carb: 3.4, protein: 1.2, fat: 0.2 },
+  버섯: { kcal: 22, carb: 3.3, protein: 3.1, fat: 0.3 },
+  토마토: { kcal: 18, carb: 3.9, protein: 0.9, fat: 0.2 },
+  닭고기: { kcal: 165, carb: 0, protein: 31, fat: 3.6 },
+  양파: { kcal: 40, carb: 9.3, protein: 1.1, fat: 0.1 },
+  배추: { kcal: 16, carb: 3, protein: 1.3, fat: 0.2 },
+  밥: { kcal: 130, carb: 28.1, protein: 2.7, fat: 0.3 },
+  식용유: { kcal: 884, carb: 0, protein: 0, fat: 100 },
+  참기름: { kcal: 884, carb: 0, protein: 0, fat: 100 },
+  올리브유: { kcal: 884, carb: 0, protein: 0, fat: 100 },
+  간장: { kcal: 60, carb: 8, protein: 8, fat: 0 },
+  국간장: { kcal: 60, carb: 8, protein: 8, fat: 0 },
+  설탕: { kcal: 387, carb: 100, protein: 0, fat: 0 },
+  소금: { kcal: 0, carb: 0, protein: 0, fat: 0 },
+  고춧가루: { kcal: 280, carb: 50, protein: 12, fat: 10 },
+  식초: { kcal: 21, carb: 0.9, protein: 0, fat: 0 },
+  밀가루: { kcal: 364, carb: 76, protein: 10, fat: 1 },
+  후추: { kcal: 0, carb: 0, protein: 0, fat: 0 },
+  레몬즙: { kcal: 22, carb: 6.9, protein: 0.4, fat: 0.2 },
+};
+
+const RECIPES = [
+  { id: "egg-fried-rice", name: "계란볶음밥", emoji: "🍳", time: "15분", servings: 2,
+    fridgeIngredients: [{ key: "계란", grams: 100 }, { key: "대파", grams: 20 }, { key: "당근", grams: 30 }],
+    pantryIngredients: [{ name: "밥", grams: 400 }, { name: "식용유", grams: 10 }, { name: "간장", grams: 10 }, { name: "소금", grams: 1 }],
+    steps: ["대파와 당근을 잘게 다진다.", "팬에 식용유를 두르고 대파를 볶아 향을 낸다.", "당근을 넣고 1~2분 볶는다.", "밥을 넣고 골고루 섞이도록 볶는다.", "계란을 풀어 넣고 스크램블하듯 재빨리 볶는다.", "간장과 소금으로 간을 맞춘다."] },
+  { id: "tofu-kimchi", name: "두부김치", emoji: "🌶️", time: "20분", servings: 2,
+    fridgeIngredients: [{ key: "두부", grams: 300 }, { key: "김치", grams: 200 }, { key: "대파", grams: 10 }],
+    pantryIngredients: [{ name: "식용유", grams: 10 }, { name: "참기름", grams: 5 }, { name: "설탕", grams: 3 }],
+    steps: ["두부는 도톰하게 썰어 끓는 물에 살짝 데친다.", "팬에 식용유를 두르고 김치를 볶는다.", "설탕을 약간 넣어 신맛을 잡는다.", "참기름과 대파를 넣고 마무리한다.", "데친 두부 옆에 볶은 김치를 곁들여 낸다."] },
+  { id: "potato-saute", name: "감자채볶음", emoji: "🥔", time: "15분", servings: 2,
+    fridgeIngredients: [{ key: "감자", grams: 300 }, { key: "당근", grams: 50 }, { key: "대파", grams: 10 }],
+    pantryIngredients: [{ name: "식용유", grams: 10 }, { name: "소금", grams: 2 }],
+    steps: ["감자와 당근을 얇게 채 썬다.", "채 썬 감자를 찬물에 담가 전분기를 뺀다.", "팬에 식용유를 두르고 감자를 먼저 볶는다.", "당근과 대파를 넣고 함께 볶는다.", "소금으로 간을 맞춘다."] },
+  { id: "bean-sprout-soup", name: "콩나물국", emoji: "🌱", time: "20분", servings: 2,
+    fridgeIngredients: [{ key: "콩나물", grams: 200 }, { key: "대파", grams: 10 }, { key: "마늘", grams: 5 }],
+    pantryIngredients: [{ name: "국간장", grams: 10 }, { name: "소금", grams: 2 }],
+    steps: ["냄비에 물과 콩나물을 넣고 뚜껑을 덮은 채 끓인다.", "마늘을 다져 넣는다.", "국간장으로 간을 맞춘다.", "대파를 넣고 한소끔 더 끓인다."] },
+  { id: "steamed-egg", name: "계란찜", emoji: "🥚", time: "15분", servings: 2,
+    fridgeIngredients: [{ key: "계란", grams: 150 }, { key: "대파", grams: 10 }],
+    pantryIngredients: [{ name: "소금", grams: 2 }],
+    steps: ["계란을 풀고 같은 부피의 물을 섞는다.", "소금으로 간을 한다.", "약불에서 저어가며 끓이거나 전자레인지로 익힌다.", "대파를 올려 마무리한다."] },
+  { id: "cucumber-salad", name: "오이무침", emoji: "🥒", time: "10분", servings: 2,
+    fridgeIngredients: [{ key: "오이", grams: 200 }, { key: "마늘", grams: 5 }],
+    pantryIngredients: [{ name: "고춧가루", grams: 5 }, { name: "식초", grams: 10 }, { name: "설탕", grams: 5 }, { name: "참기름", grams: 3 }],
+    steps: ["오이를 얇게 썰어 소금에 살짝 절인다.", "물기를 짜낸다.", "다진 마늘, 고춧가루, 식초, 설탕을 넣고 무친다.", "참기름을 둘러 마무리한다."] },
+  { id: "potato-braise", name: "감자조림", emoji: "🥔", time: "25분", servings: 2,
+    fridgeIngredients: [{ key: "감자", grams: 300 }, { key: "대파", grams: 10 }],
+    pantryIngredients: [{ name: "간장", grams: 20 }, { name: "설탕", grams: 8 }, { name: "식용유", grams: 5 }],
+    steps: ["감자를 한입 크기로 썬다.", "팬에 식용유를 두르고 감자를 굽듯이 볶는다.", "물과 간장, 설탕을 넣고 조린다.", "국물이 자작해질 때까지 졸인 뒤 대파를 넣는다."] },
+  { id: "spinach-namul", name: "시금치나물", emoji: "🥬", time: "10분", servings: 2,
+    fridgeIngredients: [{ key: "시금치", grams: 200 }, { key: "마늘", grams: 5 }],
+    pantryIngredients: [{ name: "참기름", grams: 5 }, { name: "소금", grams: 2 }],
+    steps: ["시금치를 끓는 물에 살짝 데친다.", "찬물에 헹구고 물기를 꼭 짠다.", "다진 마늘, 참기름, 소금을 넣고 무친다."] },
+  { id: "beef-radish-soup", name: "소고기무국", emoji: "🍲", time: "30분", servings: 2,
+    fridgeIngredients: [{ key: "소고기", grams: 150 }, { key: "무", grams: 200 }, { key: "대파", grams: 15 }, { key: "마늘", grams: 5 }],
+    pantryIngredients: [{ name: "국간장", grams: 15 }, { name: "참기름", grams: 5 }],
+    steps: ["소고기를 참기름에 볶는다.", "무를 나박썰어 함께 볶는다.", "물을 붓고 끓인다.", "국간장으로 간하고 마늘, 대파를 넣어 마무리한다."] },
+  { id: "zucchini-pancake", name: "애호박전", emoji: "🥒", time: "20분", servings: 2,
+    fridgeIngredients: [{ key: "애호박", grams: 200 }, { key: "계란", grams: 50 }],
+    pantryIngredients: [{ name: "밀가루", grams: 40 }, { name: "식용유", grams: 15 }, { name: "소금", grams: 2 }],
+    steps: ["애호박을 동그랗게 슬라이스한다.", "소금을 살짝 뿌려 밑간한다.", "밀가루, 계란물 순서로 옷을 입힌다.", "팬에 식용유를 두르고 노릇하게 부친다."] },
+  { id: "kimchi-fried-rice", name: "김치볶음밥", emoji: "🍚", time: "15분", servings: 2,
+    fridgeIngredients: [{ key: "김치", grams: 200 }, { key: "계란", grams: 100 }, { key: "대파", grams: 15 }],
+    pantryIngredients: [{ name: "밥", grams: 400 }, { name: "식용유", grams: 10 }, { name: "참기름", grams: 5 }],
+    steps: ["김치를 잘게 썬다.", "팬에 식용유를 두르고 김치를 볶는다.", "밥을 넣고 함께 볶는다.", "대파와 참기름을 넣어 마무리한다.", "계란후라이를 올려 낸다."] },
+  { id: "braised-tofu", name: "두부조림", emoji: "⬜", time: "20분", servings: 2,
+    fridgeIngredients: [{ key: "두부", grams: 300 }, { key: "대파", grams: 15 }, { key: "마늘", grams: 5 }],
+    pantryIngredients: [{ name: "간장", grams: 20 }, { name: "설탕", grams: 5 }, { name: "식용유", grams: 8 }],
+    steps: ["두부를 도톰하게 썰어 앞뒤로 굽는다.", "간장, 설탕, 물, 다진 마늘을 섞어 양념장을 만든다.", "두부에 양념장을 붓고 졸인다.", "대파를 올려 마무리한다."] },
+  { id: "mushroom-saute", name: "버섯볶음", emoji: "🍄", time: "10분", servings: 2,
+    fridgeIngredients: [{ key: "버섯", grams: 200 }, { key: "대파", grams: 10 }, { key: "마늘", grams: 5 }],
+    pantryIngredients: [{ name: "식용유", grams: 8 }, { name: "소금", grams: 2 }, { name: "후추", grams: 0.5 }],
+    steps: ["버섯을 적당한 크기로 찢거나 썬다.", "팬에 식용유를 두르고 마늘을 볶아 향을 낸다.", "버섯을 넣고 센 불에 빠르게 볶는다.", "소금, 후추로 간하고 대파를 넣는다."] },
+  { id: "tomato-egg", name: "토마토계란볶음", emoji: "🍅", time: "15분", servings: 2,
+    fridgeIngredients: [{ key: "토마토", grams: 200 }, { key: "계란", grams: 100 }, { key: "대파", grams: 10 }],
+    pantryIngredients: [{ name: "식용유", grams: 10 }, { name: "소금", grams: 2 }, { name: "설탕", grams: 3 }],
+    steps: ["토마토를 웨지 모양으로 썬다.", "계란을 풀어 스크램블하듯 볶아 따로 덜어둔다.", "팬에 토마토를 볶다가 설탕, 소금으로 간한다.", "스크램블 계란을 다시 넣고 섞는다.", "대파를 올려 마무리한다."] },
+  { id: "chicken-salad", name: "닭가슴살 샐러드", emoji: "🥗", time: "20분", servings: 2,
+    fridgeIngredients: [{ key: "닭고기", grams: 200 }, { key: "오이", grams: 100 }, { key: "토마토", grams: 100 }],
+    pantryIngredients: [{ name: "올리브유", grams: 10 }, { name: "소금", grams: 2 }, { name: "후추", grams: 0.5 }, { name: "레몬즙", grams: 10 }],
+    steps: ["닭가슴살을 소금, 후추로 밑간해 굽거나 삶는다.", "식힌 뒤 먹기 좋게 썬다.", "오이, 토마토를 한입 크기로 썬다.", "올리브유와 레몬즙을 뿌려 버무린다."] },
+];
+
+function scoreRecipe(recipe, fridgeKeySet) {
+  const uniqueNeeded = [...new Set(recipe.fridgeIngredients.map((i) => i.key))];
+  const owned = uniqueNeeded.filter((k) => fridgeKeySet.has(k));
+  const missing = uniqueNeeded.filter((k) => !fridgeKeySet.has(k));
+  return { owned, missing, ownedCount: owned.length, neededCount: uniqueNeeded.length, ratio: uniqueNeeded.length ? owned.length / uniqueNeeded.length : 0 };
+}
+function computeRecipeMacros(recipe, servings) {
+  const scale = servings / recipe.servings;
+  const all = [
+    ...recipe.fridgeIngredients.map((i) => ({ name: i.key, grams: i.grams })),
+    ...recipe.pantryIngredients.map((i) => ({ name: i.name, grams: i.grams })),
+  ];
+  const totals = { kcal: 0, carb: 0, protein: 0, fat: 0 };
+  all.forEach((ing) => {
+    const nut = NUTRITION_DB[ing.name];
+    if (!nut) return;
+    const factor = (ing.grams * scale) / 100;
+    totals.kcal += nut.kcal * factor;
+    totals.carb += nut.carb * factor;
+    totals.protein += nut.protein * factor;
+    totals.fat += nut.fat * factor;
+  });
+  return totals;
+}
+
+/* ------------------------------------------------------------------ */
+/* 신선도 링                                                            */
+/* ------------------------------------------------------------------ */
+function FreshnessRing({ percent, status, emoji, size = 56 }) {
+  const strokeWidth = 4.5;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.max(0, Math.min(1, percent));
+  const offset = circumference * (1 - clamped);
+  const color = status === "fresh" ? "var(--fresh)" : status === "warning" ? "var(--warn)" : "var(--urgent)";
+  return (
+    <div className="ring-wrap" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.09)" strokeWidth={strokeWidth} />
+        <circle
+          cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={strokeWidth}
+          strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`} className="ring-arc"
+        />
+      </svg>
+      <span className="ring-emoji" style={{ fontSize: size * 0.42 }}>{emoji}</span>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 재료 카드 / 레시피 카드                                                */
+/* ------------------------------------------------------------------ */
+function ItemCard({ item, onConsume, onDelete, onEditDate }) {
+  const daysLeft = daysBetween(item.expiryDate);
+  const status = getStatus(daysLeft);
+  const percent = item.totalDays > 0 ? daysLeft / item.totalDays : 0;
+  const [editing, setEditing] = useState(false);
+
+  return (
+    <div className={`item-card status-${status}`}>
+      <FreshnessRing percent={percent} status={status} emoji={item.emoji} />
+      <div className="item-body">
+        <div className="item-top">
+          <span className="item-name">{item.name}</span>
+          <span className={`item-badge badge-${status}`}>{statusLabel(status, daysLeft)}</span>
+        </div>
+        <div className="item-meta">
+          {editing ? (
+            <input
+              type="date" className="date-input-inline" defaultValue={item.expiryDate} autoFocus
+              onBlur={(e) => { onEditDate(item.id, e.target.value); setEditing(false); }}
+              onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); }}
+            />
+          ) : (
+            <button className="meta-edit-btn" onClick={() => setEditing(true)}>
+              <span>{formatShort(item.expiryDate)}까지</span>
+              <Pencil size={12} />
+            </button>
+          )}
+          {!item.matched && <span className="unmatched-tag">추정치 확인 필요</span>}
+        </div>
+      </div>
+      <div className="item-actions">
+        <button className="icon-btn consume-btn" title="다 먹었어요" onClick={() => onConsume(item.id)}>
+          <CheckCircle2 size={18} />
+        </button>
+        <button className="icon-btn delete-btn" title="삭제" onClick={() => onDelete(item.id)}>
+          <Trash2 size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RecipeListCard({ recipe, score, onOpen }) {
+  const badgeClass = score.ratio === 1 ? "full" : score.ownedCount > 0 ? "partial" : "none";
+  return (
+    <button className="recipe-card" onClick={onOpen}>
+      <span className="recipe-emoji">{recipe.emoji}</span>
+      <div className="recipe-info">
+        <div className="recipe-name">{recipe.name}</div>
+        <div className="recipe-sub">{recipe.time} · {recipe.servings}인분</div>
+      </div>
+      <span className={`recipe-match ${badgeClass}`}>{score.ownedCount}/{score.neededCount} 보유</span>
+    </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* 메인 앱                                                              */
+/* ------------------------------------------------------------------ */
+const ITEMS_KEY = "fresh-fridge-items-v1";
+
+function App() {
+  const [items, setItems] = useState(() => {
+    try {
+      const raw = localStorage.getItem(ITEMS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  const [view, setView] = useState("home"); // home | scan | confirm | manual | recipe-detail
+  const [homeTab, setHomeTab] = useState("fridge"); // fridge | recipes
+  const [ocrStatus, setOcrStatus] = useState("idle"); // idle | loading | error
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrError, setOcrError] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null); // { previewUrl }
+  const [pendingItems, setPendingItems] = useState([]);
+  const fileInputRef = useRef(null);
+
+  const [manualName, setManualName] = useState("");
+  const [manualDays, setManualDays] = useState("");
+
+  const [selectedRecipeId, setSelectedRecipeId] = useState(null);
+  const [recipeServings, setRecipeServings] = useState(2);
+
+  useEffect(() => {
+    try { localStorage.setItem(ITEMS_KEY, JSON.stringify(items)); } catch {}
+  }, [items]);
+
+  function resetScan() {
+    setOcrStatus("idle");
+    setOcrProgress(0);
+    setOcrError("");
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function handleFileChosen(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      const dataUrl = await readFileAsDataURL(file);
+      setSelectedFile({ previewUrl: dataUrl });
+      setOcrStatus("idle");
+      setOcrError("");
+    } catch (err) {
+      setOcrError(err.message || "이미지를 처리하지 못했어요.");
+      setOcrStatus("error");
+    }
+  }
+
+  async function handleAnalyze() {
+    if (!selectedFile) return;
+    setOcrStatus("loading");
+    setOcrProgress(0);
+    setOcrError("");
+    try {
+      const img = await loadImageEl(selectedFile.previewUrl);
+      const rawText = await runOcrMultiPass(img, (p) => setOcrProgress(p));
+      const keys = extractFoodKeywordsFromText(rawText);
+      if (keys.length === 0) {
+        setOcrError("이미지에서 식재료를 찾지 못했어요. 더 선명한 사진으로 다시 시도해보세요.");
+        setOcrStatus("error");
+        return;
+      }
+      const today = todayStr();
+      const built = keys.map((key) => ({
+        id: uid(), name: key, emoji: EMOJI_MAP[key] || "🥫",
+        addedDate: today, expiryDate: addDays(today, SHELF_LIFE_DB[key]),
+        totalDays: SHELF_LIFE_DB[key], matched: true, dbKey: key,
+      }));
+      setPendingItems(built);
+      setView("confirm");
+      resetScan();
+    } catch (err) {
+      setOcrError(err.message || "인식 중 문제가 발생했어요. 다시 시도해주세요.");
+      setOcrStatus("error");
+    }
+  }
+
+  function updatePendingDate(id, newDate) {
+    setPendingItems((prev) => prev.map((it) => (it.id === id ? { ...it, expiryDate: newDate, totalDays: Math.max(1, daysBetween(newDate)) } : it)));
+  }
+  function removePendingItem(id) {
+    setPendingItems((prev) => prev.filter((it) => it.id !== id));
+  }
+  function confirmAddAll() {
+    setItems((prev) => [...prev, ...pendingItems]);
+    setPendingItems([]);
+    setView("home");
+  }
+  function consumeItem(id) { setItems((prev) => prev.filter((it) => it.id !== id)); }
+  function deleteItem(id) { setItems((prev) => prev.filter((it) => it.id !== id)); }
+  function editItemDate(id, newDate) {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, expiryDate: newDate } : it)));
+  }
+
+  function submitManual(e) {
+    e.preventDefault();
+    const name = manualName.trim();
+    if (!name) return;
+    const guess = matchShelfLife(name);
+    const days = manualDays ? Math.max(1, parseInt(manualDays, 10) || guess.days) : guess.days;
+    const today = todayStr();
+    const newItem = {
+      id: uid(), name, emoji: matchEmoji(name), addedDate: today,
+      expiryDate: addDays(today, days), totalDays: days, matched: guess.matched,
+      dbKey: guess.matched ? guess.key : null,
+    };
+    setItems((prev) => [...prev, newItem]);
+    setManualName("");
+    setManualDays("");
+    setView("home");
+  }
+
+  const sortedItems = [...items].sort((a, b) => daysBetween(a.expiryDate) - daysBetween(b.expiryDate));
+  const urgentCount = items.filter((it) => daysBetween(it.expiryDate) <= 1).length;
+  const fridgeKeySet = new Set(items.map((it) => it.dbKey).filter(Boolean));
+  const rankedRecipes = RECIPES.map((recipe) => ({ recipe, score: scoreRecipe(recipe, fridgeKeySet) }))
+    .sort((a, b) => b.score.ratio - a.score.ratio || b.score.ownedCount - a.score.ownedCount);
+  const selectedEntry = rankedRecipes.find((r) => r.recipe.id === selectedRecipeId) || null;
+
+  return (
+    <div className="page">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+        :root{
+          --bg:#0E1E19; --bg-2:#0A1712; --surface:#17291F; --surface-2:#1E3327;
+          --line: rgba(255,255,255,0.08); --text:#ECF3EC; --text-muted:#93A99B;
+          --fresh:#6FCF7A; --warn:#F0AD3E; --urgent:#E86A4D; --brand:#7FDB8F;
+          --carb: var(--warn); --protein: var(--fresh); --fat:#6FA8DC;
+        }
+        *{ box-sizing:border-box; }
+        body{ margin:0; }
+        .page{
+          min-height:100vh; background: radial-gradient(120% 140% at 15% 0%, #14281F 0%, var(--bg-2) 55%, #070F0C 100%);
+          font-family:'Inter', system-ui, sans-serif; color:var(--text);
+          display:flex; justify-content:center; padding:28px 16px 60px;
+        }
+        .app-shell{
+          width:100%; max-width:430px; background:var(--bg); border:1px solid var(--line);
+          border-radius:28px; box-shadow: 0 30px 80px -30px rgba(0,0,0,0.7); overflow:hidden;
+          animation: rise .5s ease both;
+        }
+        @keyframes rise{ from{ opacity:0; transform:translateY(14px); } to{ opacity:1; transform:none; } }
+        .header{ padding:24px 22px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+        .brand{ display:flex; align-items:center; gap:9px; }
+        .brand-mark{ width:34px; height:34px; border-radius:10px; background: linear-gradient(155deg, var(--brand), #3E9A57); display:flex; align-items:center; justify-content:center; color:#0A1712; }
+        .brand-text h1{ font-family:'Space Grotesk', sans-serif; font-size:18px; font-weight:700; margin:0; letter-spacing:-0.01em; }
+        .brand-text p{ margin:1px 0 0; font-size:11.5px; color:var(--text-muted); }
+        .back-btn{ background:none; border:none; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; gap:6px; font-size:13px; padding:6px; border-radius:8px; }
+        .back-btn:hover{ color:var(--text); background:var(--surface); }
+        .privacy-badge{ font-size:10.5px; color:var(--text-muted); background:var(--surface); border:1px solid var(--line); padding:5px 9px; border-radius:999px; white-space:nowrap; flex-shrink:0; }
+        .stats-row{ display:flex; gap:10px; padding:16px 22px 4px; }
+        .stat-chip{ flex:1; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px 14px; }
+        .stat-chip .num{ font-family:'IBM Plex Mono', monospace; font-size:20px; font-weight:600; }
+        .stat-chip .lbl{ font-size:11px; color:var(--text-muted); margin-top:2px; }
+        .stat-chip.warn .num{ color:var(--urgent); }
+        .tab-row{ display:flex; gap:8px; padding:14px 16px 2px; }
+        .tab-btn{ flex:1; padding:9px; border-radius:11px; border:1px solid var(--line); background:var(--surface); color:var(--text-muted); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+        .tab-btn.active{ background: linear-gradient(155deg, var(--brand), #3E9A57); color:#0A1712; border-color:transparent; }
+        .list{ padding:14px 16px 8px; display:flex; flex-direction:column; gap:10px; }
+        .item-card{ display:flex; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:10px 12px; animation: fadein .35s ease both; }
+        @keyframes fadein{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+        .ring-wrap{ position:relative; flex-shrink:0; }
+        .ring-emoji{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+        .ring-arc{ transition: stroke-dashoffset .6s ease; }
+        .item-body{ flex:1; min-width:0; }
+        .item-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+        .item-name{ font-weight:600; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .item-badge{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; font-weight:600; padding:2px 8px; border-radius:999px; white-space:nowrap; flex-shrink:0; }
+        .badge-fresh{ background:rgba(111,207,122,0.15); color:var(--fresh); }
+        .badge-warning{ background:rgba(240,173,62,0.16); color:var(--warn); }
+        .badge-urgent{ background:rgba(232,106,77,0.18); color:var(--urgent); }
+        .badge-expired{ background:rgba(232,106,77,0.22); color:var(--urgent); }
+        .item-meta{ display:flex; align-items:center; gap:8px; margin-top:4px; }
+        .meta-edit-btn{ background:none; border:none; color:var(--text-muted); font-size:11.5px; display:flex; align-items:center; gap:4px; cursor:pointer; padding:2px 0; font-family:inherit; }
+        .meta-edit-btn:hover{ color:var(--text); }
+        .unmatched-tag{ font-size:10.5px; color:var(--warn); background:rgba(240,173,62,0.12); padding:1px 7px; border-radius:999px; }
+        .date-input-inline{ background:var(--surface-2); border:1px solid var(--line); color:var(--text); font-size:11.5px; border-radius:7px; padding:2px 6px; }
+        .item-actions{ display:flex; flex-direction:column; gap:6px; }
+        .icon-btn{ border:none; background:var(--surface-2); color:var(--text-muted); width:30px; height:30px; border-radius:9px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition: transform .15s ease, color .15s ease, background .15s ease; }
+        .icon-btn:hover{ transform:translateY(-1px); }
+        .consume-btn:hover{ color:var(--fresh); background:rgba(111,207,122,0.14); }
+        .delete-btn:hover{ color:var(--urgent); background:rgba(232,106,77,0.14); }
+        .empty-state{ margin:6px 20px 6px; padding:32px 20px; text-align:center; border:1.5px dashed var(--line); border-radius:20px; }
+        .empty-state .emoji{ font-size:34px; }
+        .empty-state h3{ font-family:'Space Grotesk', sans-serif; font-size:16px; margin:10px 0 4px; }
+        .empty-state p{ font-size:13px; color:var(--text-muted); margin:0 0 4px; line-height:1.5; }
+        .fab-row{ display:flex; gap:10px; padding:16px 16px 20px; }
+        .fab{ flex:1; display:flex; align-items:center; justify-content:center; gap:8px; padding:13px 14px; border-radius:14px; font-weight:600; font-size:13.5px; cursor:pointer; border:none; transition: filter .15s ease, transform .15s ease; font-family:inherit; }
+        .fab:hover{ transform:translateY(-1px); }
+        .fab-primary{ background: linear-gradient(155deg, var(--brand), #3E9A57); color:#0A1712; }
+        .fab-secondary{ background:var(--surface); color:var(--text); border:1px solid var(--line); }
+        .content{ padding:18px 20px 26px; }
+        .section-title{ font-family:'Space Grotesk', sans-serif; font-size:17px; margin:0 0 4px; }
+        .section-sub{ font-size:12.5px; color:var(--text-muted); line-height:1.55; margin:0 0 18px; }
+        .upload-box{ border:1.5px dashed var(--line); border-radius:18px; padding:34px 18px; text-align:center; cursor:pointer; transition:border-color .15s ease, background .15s ease; display:block; }
+        .upload-box:hover{ border-color: var(--brand); background:var(--surface); }
+        .upload-box .icon-circle{ width:52px; height:52px; border-radius:50%; background:var(--surface); display:flex; align-items:center; justify-content:center; margin:0 auto 12px; color:var(--brand); }
+        .upload-box p.title{ font-weight:600; font-size:14px; margin:0 0 4px; }
+        .upload-box p.hint{ font-size:12px; color:var(--text-muted); margin:0; }
+        .preview-wrap{ position:relative; border-radius:16px; overflow:hidden; border:1px solid var(--line); }
+        .preview-wrap img{ width:100%; display:block; max-height:280px; object-fit:cover; }
+        .preview-remove{ position:absolute; top:8px; right:8px; background:rgba(10,20,15,0.7); border:none; color:#fff; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; backdrop-filter: blur(4px); }
+        .primary-btn{ width:100%; margin-top:16px; padding:14px; border:none; border-radius:14px; background: linear-gradient(155deg, var(--brand), #3E9A57); color:#0A1712; font-weight:700; font-size:14.5px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; font-family:inherit; }
+        .primary-btn:disabled{ opacity:0.5; cursor:not-allowed; }
+        .ghost-btn{ width:100%; margin-top:10px; padding:12px; border-radius:14px; border:1px solid var(--line); background:transparent; color:var(--text-muted); font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px; font-family:inherit; }
+        .status-line{ display:flex; align-items:center; gap:8px; font-size:13px; margin-top:14px; padding:12px 14px; border-radius:12px; }
+        .status-line.loading{ background:var(--surface); color:var(--text-muted); }
+        .status-line.err{ background:rgba(232,106,77,0.12); color:var(--urgent); }
+        .spin{ animation: spin 0.9s linear infinite; }
+        @keyframes spin{ to{ transform:rotate(360deg); } }
+        .confirm-list{ display:flex; flex-direction:column; gap:10px; margin-bottom:6px; }
+        .confirm-item{ display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:10px 12px; }
+        .confirm-emoji{ font-size:22px; width:30px; text-align:center; }
+        .confirm-info{ flex:1; min-width:0; }
+        .confirm-name{ font-weight:600; font-size:13.5px; }
+        .confirm-sub{ font-size:11px; color:var(--text-muted); margin-top:2px; display:flex; align-items:center; gap:6px; }
+        .confirm-date{ background:var(--surface-2); border:1px solid var(--line); color:var(--text); font-size:12px; border-radius:8px; padding:5px 7px; font-family:'IBM Plex Mono', monospace; }
+        .confirm-remove{ border:none; background:none; color:var(--text-muted); cursor:pointer; padding:6px; }
+        .confirm-remove:hover{ color:var(--urgent); }
+        .field{ margin-bottom:14px; }
+        .field label{ display:block; font-size:12.5px; color:var(--text-muted); margin-bottom:6px; }
+        .field input, .field select{ width:100%; padding:11px 13px; border-radius:11px; border:1px solid var(--line); background:var(--surface); color:var(--text); font-size:14px; font-family:inherit; }
+        .field input:focus, .field select:focus, button:focus-visible, .upload-box:focus-visible{ outline:2px solid var(--brand); outline-offset:2px; }
+        .hint-text{ font-size:11.5px; color:var(--text-muted); margin-top:5px; }
+        .recipe-card{ display:flex; align-items:center; gap:12px; width:100%; text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:12px; cursor:pointer; font-family:inherit; color:var(--text); }
+        .recipe-card:hover{ border-color:var(--brand); }
+        .recipe-emoji{ font-size:26px; width:36px; text-align:center; flex-shrink:0; }
+        .recipe-info{ flex:1; min-width:0; }
+        .recipe-name{ font-weight:600; font-size:14px; }
+        .recipe-sub{ font-size:11.5px; color:var(--text-muted); margin-top:2px; }
+        .recipe-match{ font-family:'IBM Plex Mono', monospace; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; white-space:nowrap; flex-shrink:0; }
+        .recipe-match.full{ background:rgba(111,207,122,0.15); color:var(--fresh); }
+        .recipe-match.partial{ background:rgba(240,173,62,0.16); color:var(--warn); }
+        .recipe-match.none{ background:var(--surface-2); color:var(--text-muted); }
+        .recipe-head{ display:flex; align-items:center; gap:12px; }
+        .recipe-emoji-big{ font-size:34px; }
+        .subhead{ font-family:'Space Grotesk', sans-serif; font-size:13.5px; margin:18px 0 8px; color:var(--text); }
+        .ingredient-list{ display:flex; flex-direction:column; gap:6px; margin-bottom:4px; }
+        .ingredient-row{ display:flex; align-items:center; gap:9px; background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:9px 12px; font-size:13px; }
+        .ingredient-row.owned{ color:var(--text); }
+        .ingredient-row.owned svg{ color:var(--fresh); }
+        .ingredient-row.missing{ color:var(--text-muted); }
+        .ingredient-row.missing svg{ color:var(--urgent); }
+        .ingredient-row.pantry{ color:var(--text-muted); }
+        .ing-name{ flex:1; }
+        .ing-amount{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--text-muted); }
+        .steps-list{ margin:0 0 6px; padding-left:20px; display:flex; flex-direction:column; gap:8px; font-size:13.5px; line-height:1.5; }
+        .macro-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+        .macro-chip{ background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:12px 14px; text-align:center; }
+        .macro-num{ font-family:'IBM Plex Mono', monospace; font-size:20px; font-weight:600; }
+        .macro-lbl{ font-size:11px; color:var(--text-muted); margin-top:2px; }
+        .macro-bar{ display:flex; width:100%; height:14px; border-radius:999px; overflow:hidden; background:var(--surface-2); margin-bottom:10px; }
+        .macro-seg.carb{ background:var(--carb); }
+        .macro-seg.protein{ background:var(--protein); }
+        .macro-seg.fat{ background:var(--fat); }
+        .macro-legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--text-muted); margin-bottom:4px; }
+        .macro-legend .dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+        .dot.carb{ background:var(--carb); } .dot.protein{ background:var(--protein); } .dot.fat{ background:var(--fat); }
+        @media (prefers-reduced-motion: reduce){ *{ animation:none !important; transition:none !important; } }
+      `}</style>
+
+      <div className="app-shell">
+        <div className="header">
+          <div className="brand">
+            <div className="brand-mark"><Sparkles size={17} /></div>
+            <div className="brand-text">
+              <h1>신선해</h1>
+              <p>사진 한 장으로 끝나는 냉장고 관리</p>
+            </div>
+          </div>
+          {view === "home" ? (
+            <span className="privacy-badge">🔒 무료 · 로컬 OCR</span>
+          ) : (
+            <button className="back-btn" onClick={() => { setView("home"); resetScan(); }}>
+              <ArrowLeft size={15} /> 홈
+            </button>
+          )}
+        </div>
+
+        {view === "home" && (
+          <>
+            {items.length > 0 && (
+              <div className="stats-row">
+                <div className="stat-chip">
+                  <div className="num">{items.length}</div>
+                  <div className="lbl">보관 중인 재료</div>
+                </div>
+                <div className={`stat-chip ${urgentCount > 0 ? "warn" : ""}`}>
+                  <div className="num">{urgentCount}</div>
+                  <div className="lbl">곧 상하는 재료</div>
+                </div>
+              </div>
+            )}
+
+            <div className="tab-row">
+              <button className={`tab-btn ${homeTab === "fridge" ? "active" : ""}`} onClick={() => setHomeTab("fridge")}>🧊 냉장고</button>
+              <button className={`tab-btn ${homeTab === "recipes" ? "active" : ""}`} onClick={() => setHomeTab("recipes")}>🍳 레시피</button>
+            </div>
+
+            {homeTab === "fridge" && (
+              items.length === 0 ? (
+                <div className="empty-state">
+                  <div className="emoji">🧊</div>
+                  <h3>냉장고가 비어있어요</h3>
+                  <p>영수증이나 쿠팡·컬리 주문내역 캡처를 올리면<br />재료를 자동으로 인식하고 예상 소비기한까지 계산해드려요.</p>
+                </div>
+              ) : (
+                <div className="list">
+                  {sortedItems.map((item) => (
+                    <ItemCard key={item.id} item={item} onConsume={consumeItem} onDelete={deleteItem} onEditDate={editItemDate} />
+                  ))}
+                </div>
+              )
+            )}
+
+            {homeTab === "recipes" && (
+              <div className="list">
+                <p className="section-sub" style={{ padding: "0 4px" }}>냉장고 재료와 자동으로 매칭해서 만들 수 있는 순서로 정렬했어요.</p>
+                {rankedRecipes.map(({ recipe, score }) => (
+                  <RecipeListCard key={recipe.id} recipe={recipe} score={score}
+                    onOpen={() => { setSelectedRecipeId(recipe.id); setRecipeServings(recipe.servings); setView("recipe-detail"); }} />
+                ))}
+              </div>
+            )}
+
+            <div className="fab-row">
+              <button className="fab fab-primary" onClick={() => setView("scan")}>
+                <Camera size={16} /> 사진으로 추가
+              </button>
+              <button className="fab fab-secondary" onClick={() => setView("manual")}>
+                <Plus size={16} /> 직접 추가
+              </button>
+            </div>
+          </>
+        )}
+
+        {view === "scan" && (
+          <div className="content">
+            <h2 className="section-title">영수증 · 주문내역으로 추가</h2>
+            <p className="section-sub">
+              마트 영수증이든 쿠팡·컬리·네이버 주문내역 캡처든 상관없어요. 브라우저 안에서 바로 글자를 읽어서
+              식재료별 평균 소비기한으로 예상 날짜를 계산해요. 이미지는 어디로도 전송되지 않아요.
+            </p>
+
+            {!selectedFile ? (
+              <label className="upload-box" htmlFor="receipt-input">
+                <div className="icon-circle"><ImagePlus size={22} /></div>
+                <p className="title">영수증 사진이나 캡처를 선택하세요</p>
+                <p className="hint">영수증 촬영 · 쿠팡/컬리 주문내역 스크린샷 모두 가능</p>
+                <input ref={fileInputRef} id="receipt-input" type="file" accept="image/*" style={{ display: "none" }} onChange={handleFileChosen} />
+              </label>
+            ) : (
+              <div className="preview-wrap">
+                <img src={selectedFile.previewUrl} alt="선택한 이미지 미리보기" />
+                <button className="preview-remove" onClick={resetScan}><XIcon size={15} /></button>
+              </div>
+            )}
+
+            {!selectedFile && (
+              <p className="hint-text" style={{ marginTop: 10 }}>
+                📸 밝은 곳에서 반듯하게, 화면 전체가 잘 보이도록 찍으면 인식률이 크게 좋아져요.
+              </p>
+            )}
+
+            {selectedFile && ocrStatus !== "loading" && (
+              <button className="primary-btn" onClick={handleAnalyze}>
+                <Sparkles size={16} /> 재료 인식하기
+              </button>
+            )}
+
+            {ocrStatus === "loading" && (
+              <>
+                <div className="status-line loading">
+                  <Loader2 size={16} className="spin" /> 이미지를 읽는 중이에요... {ocrProgress}%
+                </div>
+                <p className="hint-text">인식률을 높이려고 두 가지 방식으로 분석해요. 처음 실행할 땐 엔진을 내려받느라 조금 더 걸려요.</p>
+              </>
+            )}
+            {ocrStatus === "error" && (
+              <>
+                <div className="status-line err"><AlertTriangle size={16} /> {ocrError}</div>
+                <button className="ghost-btn" onClick={resetScan}><RotateCcw size={14} /> 다시 시도</button>
+              </>
+            )}
+          </div>
+        )}
+
+        {view === "confirm" && (
+          <div className="content">
+            <h2 className="section-title">인식된 재료 확인</h2>
+            <p className="section-sub">평균 소비기한으로 예상 날짜를 계산했어요. 포장지 표기와 다르면 날짜를 눌러 수정하세요.</p>
+
+            {pendingItems.length === 0 ? (
+              <p className="hint-text">추가할 재료가 없어요.</p>
+            ) : (
+              <div className="confirm-list">
+                {pendingItems.map((item) => (
+                  <div className="confirm-item" key={item.id}>
+                    <span className="confirm-emoji">{item.emoji}</span>
+                    <div className="confirm-info">
+                      <div className="confirm-name">{item.name}</div>
+                      <div className="confirm-sub">자동 추정 · {item.totalDays}일</div>
+                    </div>
+                    <input type="date" className="confirm-date" value={item.expiryDate}
+                      onChange={(e) => updatePendingDate(item.id, e.target.value)} />
+                    <button className="confirm-remove" onClick={() => removePendingItem(item.id)}><XIcon size={15} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button className="primary-btn" disabled={pendingItems.length === 0} onClick={confirmAddAll}>
+              <CheckCircle2 size={16} /> 냉장고에 담기 ({pendingItems.length}개)
+            </button>
+          </div>
+        )}
+
+        {view === "manual" && (
+          <div className="content">
+            <h2 className="section-title">직접 추가</h2>
+            <p className="section-sub">재료 이름을 적으면 평균 소비기한을 자동으로 추천해드려요.</p>
+            <form onSubmit={submitManual}>
+              <div className="field">
+                <label htmlFor="manual-name">재료 이름</label>
+                <input id="manual-name" list="food-suggestions" placeholder="예: 방울토마토"
+                  value={manualName} onChange={(e) => setManualName(e.target.value)} required />
+                <datalist id="food-suggestions">
+                  {Object.keys(SHELF_LIFE_DB).map((k) => <option key={k} value={k} />)}
+                </datalist>
+                {manualName.trim() && (
+                  <p className="hint-text">
+                    {matchShelfLife(manualName).matched
+                      ? `자동 추정 소비기한: ${matchShelfLife(manualName).days}일`
+                      : "일치하는 항목이 없어요. 기본값 7일이 적용돼요."}
+                  </p>
+                )}
+              </div>
+              <div className="field">
+                <label htmlFor="manual-days">예상 소비기한 (일) — 선택 입력</label>
+                <input id="manual-days" type="number" min="1"
+                  placeholder={String(matchShelfLife(manualName).days || 7)}
+                  value={manualDays} onChange={(e) => setManualDays(e.target.value)} />
+              </div>
+              <button className="primary-btn" type="submit"><Plus size={16} /> 냉장고에 추가</button>
+            </form>
+          </div>
+        )}
+
+        {view === "recipe-detail" && selectedEntry && (() => {
+          const { recipe, score } = selectedEntry;
+          const scale = recipeServings / recipe.servings;
+          const macros = computeRecipeMacros(recipe, recipeServings);
+          const carbCal = macros.carb * 4, proteinCal = macros.protein * 4, fatCal = macros.fat * 9;
+          const totalCal = Math.max(1, carbCal + proteinCal + fatCal);
+          return (
+            <div className="content">
+              <div className="recipe-head">
+                <span className="recipe-emoji-big">{recipe.emoji}</span>
+                <div>
+                  <h2 className="section-title" style={{ marginBottom: 2 }}>{recipe.name}</h2>
+                  <p className="hint-text" style={{ margin: 0 }}>{recipe.time} · 기본 {recipe.servings}인분 · {score.ownedCount}/{score.neededCount} 재료 보유</p>
+                </div>
+              </div>
+
+              <div className="field" style={{ marginTop: 16 }}>
+                <label htmlFor="servings-input">인분 수</label>
+                <input id="servings-input" type="number" min="1" value={recipeServings}
+                  onChange={(e) => setRecipeServings(Math.max(1, parseInt(e.target.value, 10) || 1))} />
+              </div>
+
+              <h3 className="subhead">냉장고 재료</h3>
+              <div className="ingredient-list">
+                {recipe.fridgeIngredients.map((ing) => {
+                  const owned = fridgeKeySet.has(ing.key);
+                  return (
+                    <div className={`ingredient-row ${owned ? "owned" : "missing"}`} key={ing.key}>
+                      {owned ? <CheckCircle2 size={15} /> : <XIcon size={15} />}
+                      <span className="ing-name">{ing.key}</span>
+                      <span className="ing-amount">{Math.round(ing.grams * scale)}g</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <h3 className="subhead">기본 양념 (집에 있다고 가정)</h3>
+              <div className="ingredient-list">
+                {recipe.pantryIngredients.map((ing) => (
+                  <div className="ingredient-row pantry" key={ing.name}>
+                    <span className="ing-name">{ing.name}</span>
+                    <span className="ing-amount">{Math.round(ing.grams * scale * 10) / 10}g</span>
+                  </div>
+                ))}
+              </div>
+
+              <h3 className="subhead">만드는 법</h3>
+              <ol className="steps-list">
+                {recipe.steps.map((s, i) => <li key={i}>{s}</li>)}
+              </ol>
+
+              <h3 className="subhead">예상 영양성분 ({recipeServings}인분 기준)</h3>
+              <div className="macro-grid">
+                <div className="macro-chip"><div className="macro-num">{Math.round(macros.kcal)}</div><div className="macro-lbl">총 칼로리 (kcal)</div></div>
+                <div className="macro-chip"><div className="macro-num">{Math.round(macros.kcal / recipeServings)}</div><div className="macro-lbl">1인분 칼로리</div></div>
+              </div>
+              <div className="macro-bar">
+                <div className="macro-seg carb" style={{ width: (carbCal / totalCal * 100) + "%" }}></div>
+                <div className="macro-seg protein" style={{ width: (proteinCal / totalCal * 100) + "%" }}></div>
+                <div className="macro-seg fat" style={{ width: (fatCal / totalCal * 100) + "%" }}></div>
+              </div>
+              <div className="macro-legend">
+                <span><i className="dot carb"></i>탄수화물 {Math.round(macros.carb)}g</span>
+                <span><i className="dot protein"></i>단백질 {Math.round(macros.protein)}g</span>
+                <span><i className="dot fat"></i>지방 {Math.round(macros.fat)}g</span>
+              </div>
+              <p className="hint-text" style={{ marginTop: 10 }}>* 식재료 100g당 평균 영양성분을 기준으로 계산한 추정치예요. 실제 값은 브랜드·조리법에 따라 달라질 수 있어요.</p>
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>
